@@ -86,20 +86,43 @@ func (p *Parser) pushComment() {
 	p.target = ""
 }
 
+// Helper function to trim whitespace
+func trim(s string) string {
+	return strings.TrimSpace(s)
+}
+
+// Check if a line is an include directive
+func includeLine(s string) bool {
+	t := strings.TrimLeft(s, " \t")
+	return strings.HasPrefix(t, "include ") ||
+		strings.HasPrefix(t, "-include ") ||
+		strings.HasPrefix(t, "sinclude ")
+}
+
 // Push include node.
 func (p *Parser) pushInclude() {
-	s := strings.Trim(strings.Replace(p.advance(), "include ", "", 1), " ")
+	raw := trim(p.advance())           // whole line
+	raw = strings.TrimLeft(raw, " \t") // drop indent
+
+	if strings.HasPrefix(raw, "-include ") {
+		raw = strings.TrimPrefix(raw, "-include ")
+	} else if strings.HasPrefix(raw, "sinclude ") {
+		raw = strings.TrimPrefix(raw, "sinclude ")
+	} else {
+		raw = strings.TrimPrefix(raw, "include ")
+	}
+
+	path := trim(raw)
+
 	p.nodes = append(p.nodes, Include{
-		Value: s,
+		Value: path,
 	})
 }
 
 // Parse the input.
 func (p *Parser) parse() error {
-	for {
+	for p.i < len(p.lines) {
 		switch {
-		case p.i == len(p.lines)-1:
-			return nil
 		case strings.HasPrefix(p.peek(), ".PHONY"):
 			p.advance()
 		case len(p.peek()) == 0:
@@ -107,7 +130,7 @@ func (p *Parser) parse() error {
 			p.advance()
 		case p.peek()[0] == '#':
 			p.bufferComment()
-		case strings.HasPrefix(p.peek(), "include "):
+		case includeLine(trim(p.peek())):
 			p.pushInclude()
 		case strings.ContainsRune(p.peek(), ':'):
 			p.target = strings.Split(p.advance(), ":")[0]
@@ -116,4 +139,5 @@ func (p *Parser) parse() error {
 			p.advance()
 		}
 	}
+	return nil
 }
